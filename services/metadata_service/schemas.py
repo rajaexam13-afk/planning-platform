@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class DimensionBase(BaseModel):
@@ -40,7 +40,6 @@ class Attribute(AttributeBase):
 class DimensionMemberBase(BaseModel):
     dimension_id: UUID
     member_key: str
-    member_label: str | None = None
 
 
 class DimensionMemberCreate(DimensionMemberBase):
@@ -52,59 +51,3 @@ class DimensionMember(DimensionMemberBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class HierarchyBase(BaseModel):
-    dimension_id: UUID
-    hierarchy_name: str
-
-
-class HierarchyCreate(HierarchyBase):
-    pass
-
-
-class Hierarchy(HierarchyBase):
-    hierarchy_id: UUID
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class HierarchyLevelBase(BaseModel):
-    hierarchy_id: UUID
-    level_name: str
-    level_order: int = Field(ge=1)
-
-
-class HierarchyLevelCreate(HierarchyLevelBase):
-    pass
-
-
-class HierarchyLevel(HierarchyLevelBase):
-    level_id: UUID
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class MemberRelationshipBase(BaseModel):
-    hierarchy_id: UUID
-    parent_member_id: UUID
-    child_member_id: UUID
-
-
-class MemberRelationshipCreate(MemberRelationshipBase):
-    pass
-
-
-class MemberRelationship(MemberRelationshipBase):
-    relationship_id: UUID
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Backward-compatible aliases for older imports
-DimensionRead = Dimension
-AttributeRead = Attribute
-DimensionMemberRead = DimensionMember
