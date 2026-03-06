@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .database import Base, engine
-from .routers import attributes, dimensions, hierarchies, members, upload
+from .routers import attributes, dimensions, members
 
 
 @asynccontextmanager
@@ -17,8 +17,6 @@ app = FastAPI(title="Metadata Service", lifespan=lifespan)
 app.include_router(dimensions.router)
 app.include_router(attributes.router)
 app.include_router(members.router)
-app.include_router(hierarchies.router)
-app.include_router(upload.router)
 
 
 @app.get("/health")
