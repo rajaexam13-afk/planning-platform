@@ -101,3 +101,9 @@ class MemberRelationship(MemberRelationshipBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Backward-compatible aliases for older imports
+DimensionRead = Dimension
+AttributeRead = Attribute
+DimensionMemberRead = DimensionMember
