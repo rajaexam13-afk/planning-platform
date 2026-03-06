@@ -69,10 +69,7 @@ def delete_attribute(db: Session, attribute_id: UUID) -> models.Attribute | None
 # Members
 
 def create_member(db: Session, payload: schemas.DimensionMemberCreate) -> models.DimensionMember:
-    payload_data = payload.model_dump()
-    payload_data["member_label"] = payload_data.get("member_label") or payload_data["member_key"]
-
-    db_member = models.DimensionMember(**payload_data)
+    db_member = models.DimensionMember(**payload.model_dump())
     db.add(db_member)
     db.commit()
     db.refresh(db_member)
@@ -98,45 +95,3 @@ def delete_member(db: Session, member_id: UUID) -> models.DimensionMember | None
     db.delete(db_member)
     db.commit()
     return db_member
-
-
-# Hierarchies
-
-def create_hierarchy(db: Session, payload: schemas.HierarchyCreate) -> models.Hierarchy:
-    db_hierarchy = models.Hierarchy(**payload.model_dump())
-    db.add(db_hierarchy)
-    db.commit()
-    db.refresh(db_hierarchy)
-    return db_hierarchy
-
-
-def get_hierarchies(db: Session) -> list[models.Hierarchy]:
-    stmt = select(models.Hierarchy).order_by(models.Hierarchy.created_at)
-    return list(db.scalars(stmt).all())
-
-
-def get_hierarchy(db: Session, hierarchy_id: UUID) -> models.Hierarchy | None:
-    stmt = select(models.Hierarchy).where(models.Hierarchy.hierarchy_id == hierarchy_id)
-    return db.scalars(stmt).first()
-
-
-# Hierarchy levels
-
-def create_hierarchy_level(db: Session, payload: schemas.HierarchyLevelCreate) -> models.HierarchyLevel:
-    db_level = models.HierarchyLevel(**payload.model_dump())
-    db.add(db_level)
-    db.commit()
-    db.refresh(db_level)
-    return db_level
-
-
-# Member relationships
-
-def create_member_relationship(
-    db: Session, payload: schemas.MemberRelationshipCreate
-) -> models.MemberRelationship:
-    db_relationship = models.MemberRelationship(**payload.model_dump())
-    db.add(db_relationship)
-    db.commit()
-    db.refresh(db_relationship)
-    return db_relationship
