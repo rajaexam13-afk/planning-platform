@@ -12,13 +12,6 @@ from ..database import get_db
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 
-def _normalize_cell(value) -> str | None:
-    if pd.isna(value):
-        return None
-    normalized = str(value).strip()
-    return normalized if normalized else None
-
-
 @router.post("/dimension", status_code=status.HTTP_201_CREATED)
 def upload_dimension_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename or not file.filename.lower().endswith(".csv"):
@@ -36,11 +29,6 @@ def upload_dimension_csv(file: UploadFile = File(...), db: Session = Depends(get
     columns = [str(col).strip() for col in dataframe.columns]
     if len(columns) == 0 or any(not col for col in columns):
         raise HTTPException(status_code=400, detail="CSV must contain valid column names")
-    if len(set(columns)) != len(columns):
-        raise HTTPException(status_code=400, detail="CSV headers must be unique after trimming spaces")
-
-    # Keep DataFrame column names aligned to cleaned headers.
-    dataframe.columns = columns
 
     dimension_name = columns[-1]
 
@@ -65,6 +53,7 @@ def upload_dimension_csv(file: UploadFile = File(...), db: Session = Depends(get
     else:
         dimension = existing_dimension
 
+    # Create attributes for non-key columns (all except the final dimension key column)
     existing_attrs = {
         attr.attribute_name
         for attr in db.scalars(
@@ -89,53 +78,31 @@ def upload_dimension_csv(file: UploadFile = File(...), db: Session = Depends(get
         except IntegrityError:
             db.rollback()
 
+    # Create members from unique values across all columns
     existing_member_rows = db.scalars(
         select(models.DimensionMember).where(models.DimensionMember.dimension_id == dimension.dimension_id)
     ).all()
     member_key_to_id = {row.member_key: row.member_id for row in existing_member_rows}
 
-    normalized_rows: list[list[str | None]] = [
-        [_normalize_cell(row[col]) for col in columns] for _, row in dataframe.iterrows()
-    ]
-
-    # Build path-based member keys and preserve display labels.
-    row_member_keys: list[list[str | None]] = []
     members_created = 0
-
-    for row_values in normalized_rows:
-        path_stack: list[str] = []
-        keys_for_row: list[str | None] = []
-
-        for cell_value in row_values:
-            if cell_value is None:
-                keys_for_row.append(None)
+    for col in columns:
+        values = dataframe[col].dropna().astype(str).str.strip()
+        for value in values:
+            if not value or value in member_key_to_id:
                 continue
-
-            path_stack.append(cell_value)
-            path_key = "/".join(path_stack)
-            keys_for_row.append(path_key)
-
-            if path_key in member_key_to_id:
-                continue
-
             try:
                 new_member = crud.create_member(
                     db,
-                    schemas.DimensionMemberCreate(
-                        dimension_id=dimension.dimension_id,
-                        member_key=path_key,
-                        member_label=cell_value,
-                    ),
+                    schemas.DimensionMemberCreate(dimension_id=dimension.dimension_id, member_key=value),
                 )
                 member_key_to_id[new_member.member_key] = new_member.member_id
                 members_created += 1
             except IntegrityError:
                 db.rollback()
 
-        row_member_keys.append(keys_for_row)
-
     hierarchy_created = False
 
+    # Build hierarchy only when multiple columns exist
     if len(columns) > 1:
         hierarchy_name = f"{dimension_name}_hierarchy"
 
@@ -198,24 +165,18 @@ def upload_dimension_csv(file: UploadFile = File(...), db: Session = Depends(get
                 ).all()
             }
 
-            for keys_for_row in row_member_keys:
-                for parent_idx in range(len(columns) - 1):
-                    child_idx = parent_idx + 1
-
-                    # Preserve hierarchy level gaps: only adjacent non-empty columns form edges.
-                    if keys_for_row[parent_idx] is None or keys_for_row[child_idx] is None:
-                        continue
-
-                    parent_id = member_key_to_id.get(keys_for_row[parent_idx])
-                    child_id = member_key_to_id.get(keys_for_row[child_idx])
-
+            for _, row in dataframe.iterrows():
+                chain_values = [str(row[col]).strip() for col in columns if pd.notna(row[col]) and str(row[col]).strip()]
+                if len(chain_values) < 2:
+                    continue
+                for parent_val, child_val in zip(chain_values, chain_values[1:]):
+                    parent_id = member_key_to_id.get(parent_val)
+                    child_id = member_key_to_id.get(child_val)
                     if parent_id is None or child_id is None or parent_id == child_id:
                         continue
-
                     edge = (parent_id, child_id)
                     if edge in existing_relationships:
                         continue
-
                     try:
                         crud.create_member_relationship(
                             db,
